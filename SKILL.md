@@ -1,17 +1,28 @@
 ---
 name: lucid-architecture
-description: "Generate polished Snowflake-branded draw.io architecture diagrams. Use when: $LucidArchitecture, architecture diagram, draw.io, reference architecture, demo diagram, solution architecture. Auto-analyzes session context to detect Snowflake objects and generates production-quality .drawio files with official brand colors."
+description: "Generate polished Snowflake-branded architecture diagrams, natively in Lucidchart (default) or as draw.io files. Use when: $LucidArchitecture, architecture diagram, lucid, lucidchart, draw.io, reference architecture, demo diagram, solution architecture. Auto-analyzes session context to detect Snowflake objects and generates production-quality diagrams with official brand colors."
 ---
 
 # LucidArchitecture
 
-Generate polished, Snowflake-branded draw.io architecture diagrams from session context.
+Generate polished, Snowflake-branded architecture diagrams from session context — natively in Lucidchart or as a draw.io file.
 
 ## When to Use
 
 - User invokes `$LucidArchitecture`
-- User asks for an architecture diagram, reference architecture, or draw.io file
+- User asks for an architecture diagram, reference architecture, Lucid diagram, or draw.io file
 - End of a demo-building session when the user wants a visual summary
+
+## Output target
+
+**Default to Lucidchart.** Choose draw.io only when precise typography matters more than a native Lucid document.
+
+| Target | Choose when | Tradeoff |
+|---|---|---|
+| **Lucidchart** (default) | Sharing, collaborative editing, or presenting from Lucid | No `fontSize` control — needs a ~30s manual font pass on delivery |
+| draw.io | Exact font sizes / typography are required in the artifact | A local file, not a Lucid document |
+
+If the target is genuinely unclear, ask once as part of the Step 2 stopping point rather than as a separate question.
 
 ## Workflow
 
@@ -20,13 +31,15 @@ Start
   |
 Step 1: Analyze Session Context
   |
-Step 2: Recommend Diagram Style
+Step 2: Recommend Diagram Style (+ confirm output target)
   |  <- STOPPING POINT: user confirms or customizes
 Step 3: Gather Component Details
   |  <- STOPPING POINT: user confirms component list
-Step 4: Generate .drawio File
+Step 4: Generate diagram
+  |    4A -> Lucidchart via MCP   (default)
+  |    4B -> .drawio file
   |
-Step 5: Offer Refinements
+Step 5: Verify render, then offer refinements
   |  <- STOPPING POINT: iterate or done
 Done
 ```
@@ -116,9 +129,10 @@ Which layout? (or confirm recommendation)
    - `end-user-led.drawio`
 
 2. **Load reference files** for styling guidance:
-   - `references/style-guide.md` — Brand colors and layout rules
-   - `references/drawio-components.md` — Parameterized XML snippets
-   - `references/icon-mapping.md` — Icon selection
+   - `references/style-guide.md` — Brand colors and layout rules (**both** targets)
+   - `references/lucid-standard-import.md` — **REQUIRED for Lucid target.** Format constraints and geometry recipe.
+   - `references/drawio-components.md` — Parameterized XML snippets (draw.io target only)
+   - `references/icon-mapping.md` — Icon selection (draw.io target only; emoji break in Lucid)
 
 3. **Map session objects to placeholders.** Build a mapping table:
 
@@ -156,7 +170,27 @@ Shall I proceed, or would you like to adjust?
 
 ---
 
-### Step 4: Generate .drawio File
+### Step 4A: Generate Lucidchart Diagram (default)
+
+**Goal:** Produce a native Lucid document via the Lucid MCP.
+
+**Read `references/lucid-standard-import.md` first.** It is not optional — the format has undocumented constraints (newlines ignored, no `fontSize`, text auto-fits to width, assisted layout overrides coordinates) that will otherwise cost several rebuild cycles.
+
+**Actions:**
+
+1. Read the `lucid://diagram-specification` resource (required before every create call).
+2. **Lay out in horizontal bands**, per §2 of the Lucid reference. Do not use a side rail of tool boxes.
+3. Build geometry from the §3 recipe. Set **`assistedLayout: false` on every container** and `use_assisted_layout: false` at the top level.
+4. **One text shape per visual line** — `h=26`, 28px spacing. Never rely on `\n`.
+5. Apply colours from §4. No emoji.
+6. Route connectors with explicit `position` anchors on **both** endpoints; place each consumer beneath its producer.
+7. Call `mcp_lucidcharts_lucid_create_diagram_from_specification` with `standard_import_json` and `product: "lucidchart"`. On HTTP 500, retry the identical payload.
+
+**Output:** Lucid document ID, plus view and edit URLs.
+
+---
+
+### Step 4B: Generate .drawio File
 
 **Goal:** Produce the final draw.io XML file.
 
@@ -199,16 +233,25 @@ Shall I proceed, or would you like to adjust?
 
 ---
 
-### Step 5: Offer Refinements
+### Step 5: Verify Render, Then Offer Refinements
 
-**Goal:** Let the user iterate on the diagram.
+**Goal:** Confirm the diagram actually renders correctly, then let the user iterate.
 
-**STOPPING POINT** — Present the file and ask:
+**For the Lucid target, verification is mandatory before presenting:**
+
+1. Call `mcp_lucidcharts_lucid_export_document_as_PNG` with the returned `documentId`.
+2. **Inspect the image.** Check for overlapping shapes, container titles colliding with neighbours, connectors crossing through containers, text overflowing, and text-size inconsistency.
+3. Fix and re-verify before handing off.
+
+**Never describe a diagram as clean without having looked at the render.**
+
+**STOPPING POINT** — Present the result and ask:
 
 ```
-Architecture diagram saved to: [path]
+Architecture diagram: [Lucid view/edit URLs, or file path]
 
-Open it in draw.io (app.diagrams.net) or VS Code with the draw.io extension.
+[Lucid only] Lucid's import format has no font-size control, so to even out the
+type: open the edit link, Cmd+A, set font size to 10pt. About 30 seconds.
 
 Would you like to:
 1. Adjust components (add/remove/rename)
@@ -224,7 +267,7 @@ Would you like to:
 
 ## Styling Rules (Quick Reference)
 
-These are NON-NEGOTIABLE. Every diagram must follow:
+These are NON-NEGOTIABLE for the **draw.io** target. For the **Lucid** target, see the achievability table in §7 of `references/lucid-standard-import.md` — font sizes, font family, and emoji icons are not reachable through Lucid's import format, and text auto-fits to its box.
 
 - **Header**: Full-width bar `#29B5E8`, snowflake logo in white circle, title 22px bold white
 - **Layers**: `#F5FBFE` bg, `#11567F` 2px border, badge in `#11567F`
@@ -252,8 +295,8 @@ These are NON-NEGOTIABLE. Every diagram must follow:
 
 ## Output
 
-A production-quality `.drawio` XML file that:
-- Opens cleanly in draw.io or VS Code draw.io extension
+A production-quality diagram — a Lucid document (default) or a `.drawio` XML file — that:
+- Opens cleanly in Lucidchart, or in draw.io / the VS Code draw.io extension
 - Uses official Snowflake brand colors
 - Shows clear left-to-right (or right-to-left for end-user-led) data flow
 - Distinguishes internal (blue) from external (orange) components
